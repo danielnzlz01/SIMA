@@ -1,0 +1,670 @@
+---
+title: "Etapa 3 "
+date: "2022-11-15"
+output: pdf_document
+---
+
+##### *Pamela Cantú Rodríguez (A01285128)*
+
+##### *Emiliano Ferreira Guadarrama (A01654418)*
+
+##### *Daniel Isaac Núñez López (A01654137)*
+
+##### *Ana Sofía Ugalde Jiménez (A01702639)*
+
+##### *César Guillermo Vázquez Álvarez (A01197857)*
+
+# Análisis gráfico
+
+## Lectura de los datos
+
+```{r setup1, warning=FALSE, results='hide', message=FALSE}
+library(ggplot2)
+library(RColorBrewer)
+library(ggrepel)
+library(ggpubr)
+```
+
+```{r chdir, include=FALSE}
+setwd('D:/Desktop')
+```
+
+```{r load_data1}
+# reshaped data es el dataframe final de la entrega 2
+df = read.csv("reshaped_data.csv")
+
+colnames(df)[1] <- 'datetime'
+
+head(df)
+```
+
+## Creación de nuevas columnas
+
+```{r new_cols}
+df$weekday <- factor(
+  strftime(df$date, "%a"),
+  levels = c('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'),
+  ordered = TRUE)
+
+df$month <- factor(
+  strftime(df$date, "%b"),
+  levels = c('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', "Sep", "Oct", "Nov", "Dec"),
+  ordered = TRUE
+  )
+
+df$time <- as.integer(strftime(df$datetime, "%H"))
+
+head(df)
+```
+
+## Tendencias por hora para cada día de la semana
+
+#### NOTA: En esta celda se deberían crear \~90 gráficas pero para evitar el spam se incluyeron breaks marcados con [\# BREAK]{.underline} pero se pueden encontrar todas las gráficas en esta carpeta de google drive: <https://drive.google.com/drive/folders/1VrS7DSZeRb7fwR9ty6zt8clE-XvonyRH?usp=sharing> {style="color: red"}
+
+```{r, warning = FALSE, message=FALSE}
+sunset.palette = c('#33608CFF', '#6F659AFF', '#9F69A3FF', '#CC6E94FF', '#EB7F82FF', '#F3A767FF', '#F4A952FF', '#EF8549FF', '#E46946FF', '#D75045FF', '#C83843FF', '#B81840FF')
+
+names(sunset.palette) <- levels(df$month)
+
+dias = c("Mon"='lunes', "Tue"='martes', "Wed"='miércoles', "Thu"='jueves',"Fri"='viernes', "Sat"='sábado', "Sun"='domingo')
+
+# Nombres y unidades de las variables meteorológicas para los títulos y ejes
+met = c("PRS"='Presión Atmosférica [mm Hg]', "RAINF"='Precipitación [mm/h]', "RH"='Humedad Relativa [%]', "SR"='Radiación Solar [kW/m^2]', "TOUT"='Temperatura [°C]', "WDR"='Dirección del Viento [°]', "WSR" = 'Velocidad del Viento [km/h]')
+
+
+for (day in levels(df$weekday)){
+  for (contaminante in seq(2, 26, 2)) {
+    data <- df[(df$weekday == day), c(contaminante, 30, 31)]
+    names(data)[1] = "cont"
+    nombre <- names(df)[contaminante]
+    
+    # cambio de labels dependiendo si la variable contaminante es realmante un contaminante o una variable meteorológica
+    if (contaminante > 15){
+      titulo = paste('Concentraciones de', nombre, 'en los días', dias[[day]])
+      ylabel = paste('Concentración de', nombre)
+    } else {
+      titulo = paste(met[[nombre]], 'en los días', dias[[day]])
+      ylabel = met[[nombre]]
+    }
+    
+    graph <- ggplot(
+      data,
+      aes(
+        x = time,
+        y = cont,  
+      )
+    ) + geom_smooth(             # líneas de cada mes
+      aes(
+        group = month,
+        col = month
+      ),
+      lwd = 1,
+      se = FALSE
+    ) + geom_smooth(             # líneas 'promedio'
+      col = 'black',
+      linetype = 'dashed'
+    ) + scale_x_continuous(
+      breaks = seq(0, 24, 2)
+    ) + labs(
+      title = titulo,
+      x = 'Hora del día',
+      y = ylabel
+    ) + scale_color_manual(
+      name = "Meses",
+      breaks = names(sunset.palette),
+      values = sunset.palette
+    ) + theme_minimal()
+  
+    print(graph)
+    
+    #ggsave(paste0(nombre, '-', dias[[day]], ".png"), width = 7, height = 4, path = "graphs")
+    break                                                         # BREAK
+  }
+  break                                                        # BREAK
+}
+```
+
+##  Promedios de contaminantes para el índice
+
+### PM10 y PM2.5
+
+```{r}
+pms = df[, c(22, 24)]
+
+# Comenzamos con 11 promedios que se harían con <12 mediciones
+pm25 = rep(NaN, 11)
+pm10 = rep(NaN, 11)
+
+for (i in 12:nrow(df)){
+  pm10 <- c(pm10, mean(pms[seq(i-11, i), 1], na.rm=T))
+  pm25 <- c(pm25, mean(pms[seq(i-11, i), 2], na.rm=T))
+}
+
+df$PM10.avg  <- pm10
+df$PM2.5.avg <- pm25
+```
+
+### O3 y CO
+
+```{r}
+df2 = df[, c(20, 16)]
+
+# Comenzamos con 7 promedios que se harían con <8 mediciones
+o3 = rep(NaN, 7)
+co = rep(NaN, 7)
+
+for (i in 8:nrow(df)){
+  o3 <- c(o3, mean(df2[seq(i-7, i), 1], na.rm=T))
+  co <- c(co, mean(df2[seq(i-7, i), 2], na.rm=T))
+}
+
+df$O3.avg <- o3
+df$CO.avg <- co
+```
+
+### SO2
+
+```{r}
+so2 = df$SO2
+
+# Comenzamos con 23 promedios que se harían con <24 mediciones
+so = rep(NaN, 23)
+
+for (i in 24:nrow(df)){
+  so <- c(so, mean(so2[seq(i-23, i)], na.rm=T))
+}
+
+df$SO2.avg = so
+```
+
+## Cálculo del índice
+
+```{r, warning = F}
+# colores según la NORMA Oficial Mexicana NOM-172-SEMARNAT-2019 (Tabla 11)
+colores =c("Buena"='#00e400',"Aceptable"='#ffff00',"Mala"='#ff7e00',"Muy Mala"='#ff0000',"Extremadamente Mala"='#8f3f97',"NA"='#ffffff')
+
+# límites de cada contaminante en las unidades correctas, los nombrs son iguales a los del dataframe que utilizaremos
+limits = data.frame(
+  PM10.avg=c(50, 75, 155, 235),
+  PM2.5.avg=c(25, 45, 79, 147),
+  O3.avg=c(51, 70, 92, 114),
+  O3=c(51,95,135,175),
+  NO2=c(107, 210, 230, 250),
+  SO2.avg=c(8, 110, 165, 220),
+  CO.avg=c(8.75, 11, 13.3, 15.5)
+)
+
+# fechas que se mostrarán en el gráfico
+show.dates = data$date[seq(1, nrow(data), 24*31)]
+
+
+
+for (name in names(limits)){
+  
+
+  avg = df[[name]]
+  lim = limits[[name]]
+  max.break = max(lim[4], max(avg, na.rm = T)) + 1
+  lim = c(0, lim, max.break)
+  
+  # utilizamos datetime en vez de date porque tiene valores únicos para cada observación
+  data <- data.frame(
+    date = df$datetime,
+    cont = avg,
+    bin=cut(
+      avg,
+      breaks = lim,
+      labels = c('Buena', 'Aceptable', 'Mala', 'Muy Mala', 'Extremadamente Mala')
+    )
+  )
+  
+  # reemplazamos los nans con 0 para que sean visibles en la gráfica
+  data$cont[is.nan(data$cont)] <- 0
+  
+  # scatterplot
+  plt = ggplot(
+    data,
+    aes(
+      x = date,
+      y = cont
+    )
+  ) + geom_point(
+    aes(
+      color = bin
+    )
+  ) + scale_color_manual(
+    values = colores[levels(data$bin)]
+  ) + scale_x_discrete(
+    breaks = show.dates,
+    labels = strftime(as.Date(show.dates), '%h %d'),
+  ) + theme_classic2() + theme(
+    legend.position = 'top',
+    axis.text.x = element_text(
+      angle = 40,
+      hjust = 1
+    ),
+    legend.justification = c(0, 1)
+  ) + labs(
+    col = 'Calidad del Aire'
+  ) + ylab(
+    name
+  ) + xlab(
+    'Fecha'
+  )
+  
+  # polígono de frecuencias 
+  freq = ggplot(
+    data
+  ) + geom_freqpoly(
+    aes(
+      y = cont,
+      group = bin,
+      col = bin
+    ),
+    lwd = 1,
+    show.legend = F,
+    bins = 40
+  ) + scale_color_manual(
+    values = colores[levels(data$bin)]
+  ) + theme_void() + theme(
+    plot.margin = margin(t = 35, b = 40)        # se utiliza margin para intentar ajustar los plots
+  )
+  
+  graph <-  ggarrange(plt, freq,
+              ncol = 2, 
+              widths = c(3.5, 1),
+              legend = 'top'
+            # adjust ='h'                        # nunca funcionó esta opción
+            )
+  
+  show(graph)
+  
+  # ggsave(paste0('Indice-', name, '.png'), width = 14, path = 'indices')
+}
+```
+
+# Análisis estadístico y modelación
+
+## Lectura de los datos
+
+```{r setup2, warning=FALSE, results='hide', message=FALSE}
+library(ggcorrplot)
+library(dplyr)
+library(Hmisc)
+library(reshape2)
+library(zoo)
+```
+
+```{r load_data2}
+met.orig = read.csv("meteorologia.csv")
+cont.orig = read.csv('contaminantes.csv')
+```
+
+### Transformación
+
+Primero acotamos los datos a la estación que utilizaremos y los parámetros que nos interesan.
+
+```{r acot}
+met = met.orig[c(2, 3, 6, 7, 28, 29, 18, 19)]
+cont = cont.orig[c(2, 3, 6, 7, 28, 29, 18, 19)]
+```
+
+```{r}
+sum(is.na(met$NE))
+met$NE[is.na(met$NE)] <- met$Norte2[is.na(met$NE)]
+sum(is.na(met$NE))
+met$NE[is.na(met$NE)] <- met$NE2[is.na(met$NE)]
+sum(is.na(met$NE))
+met$NE = na.locf(met$NE, na.rm = F, fromLast = F)
+sum(is.na(met$NE))
+met$NE = na.locf(met$NE, na.rm = F, fromLast = T)
+sum(is.na(met$NE))
+```
+
+```{r}
+sum(is.na(cont$NE))
+cont$NE[is.na(cont$NE)] <- cont$Norte2[is.na(cont$NE)]
+sum(is.na(cont$NE))
+cont$NE[is.na(cont$NE)] <- cont$NE2[is.na(cont$NE)]
+sum(is.na(cont$NE))
+cont$NE = na.locf(cont$NE, na.rm = F, fromLast = F)
+sum(is.na(cont$NE))
+cont$NE = na.locf(cont$NE, na.rm = F, fromLast = T)
+sum(is.na(cont$NE))
+```
+
+```{r}
+met = met[c(1, 2, 3, 4)]
+cont = cont[c(1, 2, 3, 4)]
+```
+
+Después hacemos la transformación descrita en la primer entrega
+
+```{r transformation}
+# utilizamos gsub para eliminar whitespaces, después convertimos la columna a factores
+met$parameter <- as.factor(gsub(' ', '', met$parameter))
+
+# para asegurar que los dataframes cuadren deben tener el mismo índice, aquí utilizaremos 
+# la fecha/hora que es el índice de nuestro dataframe final
+# Para lograr esto creamos un dataframe vacío con todas las horas en nuestro rango
+
+all.hours <- seq(as.POSIXlt(min(met$date)), as.POSIXlt(max(met$date)), 'hour')
+# resulta que por cuestiones de cambio de horario hay una hora 
+# repetida (2021-10-31 01:00:00) entonces es necesario quitarla
+all.hours <- all.hours[-2931]
+
+# creamos un dataframe con la columna que tiene todas las horas
+df <- data.frame(
+                date = as.character.Date(all.hours)
+               )
+# añadimos cada parámetro como una columna (y la columna de 
+# las banderas correpondientes) al dataframe
+for (param in levels(met$parameter)) {
+  
+  # filtramos según el parámetro y tomamos las columnas menos el parámetro
+  par <- met[met$parameter == param, -2]
+
+  # cambiamos los nombre NE y NE_b por los correspondientes para 
+  # el parámetro y sus banderas
+  colnames(par) <- c('date', param, paste0(param, '.f'))
+  
+  # añadimos las columnas al df
+  df <- left_join(df, par, by = 'date')
+}
+
+# cambiamos el índice del df a la hora y borramos esa columna
+rownames(df) <- df$date
+df$date <- NULL
+
+head(df)
+```
+
+```{r categorias}
+# juntamos todas las columnas de banderas y conseguimos los 
+# posibles valores para las banderas
+flags = unique(melt(df[seq(2, 14, 2)], id.vars = NULL, na.rm = T)$value)
+
+# convertimos todas las filas de banderas a factores con los mismos niveles
+df[seq(2,14, 2)] <- lapply(df[seq(2,14, 2)], factor, levels=flags)
+
+summary(df)
+```
+
+```{r cont}
+cont$parameter <- as.factor(gsub(' ', '', cont$parameter))
+cont$NE_b <- as.factor(cont$NE_b)
+
+df2 <- data.frame(
+                date = as.character.Date(all.hours)
+               )
+
+for (param in levels(cont$parameter)) {
+  
+  par <- cont[cont$parameter == param, -2]
+
+  colnames(par) <- c('date', param, paste0(param, '.f'))
+  
+  df2 <- left_join(df2, par, by = 'date')
+}
+
+head(df2)
+```
+
+```{r join}
+# podemos corroborar que los dataframes ya están alineados
+# all(rownames(df) == df2$date)
+
+# añadimos los contaminantes al dataframe
+df <- cbind(df, df2[-1])
+head(df)
+```
+
+```{r}
+prueba = df[c(seq(1, 26, 2))]
+head(prueba)
+```
+
+```{r}
+prueba2 = prueba[c(1, 3, 4, 5, 6, 7, 10)]
+head(prueba2)
+```
+
+```{r}
+sum(apply(prueba2, 2, function(x) is.na(x)))
+
+sapply(prueba2, function(y) sum(length(which(is.na(y)))))
+
+for (i in 1:7) 
+{
+  prueba2[i] = na.locf(prueba2[i], na.rm = F, fromLast = F)
+}
+
+sapply(prueba2, function(y) sum(length(which(is.na(y)))))
+```
+
+```{r}
+N = prueba2
+```
+
+```{r}
+library(FactoMineR)
+library(factoextra)
+acp = PCA(N, graph = F)
+```
+
+```{r}
+acp
+```
+
+```{r}
+fviz_pca_var(acp, col.var="contrib")+
+scale_color_gradient2(low="blue", mid="white", 
+                      high="red", midpoint=55)+theme_bw()+
+  labs(
+    title = "Biplot de Variables del ACP",
+    color = "Contribución"
+  )
+```
+
+```{r}
+fviz_pca_ind(acp, label="none") +
+  labs(title = "Gráfica de Individuos del ACP")
+```
+
+```{r}
+eigenvalues <- acp$eig
+eigenvalues[,3]
+```
+
+```{r}
+summary(acp) 
+```
+
+```{r}
+library(psych)
+R = cor(N)
+KMO(R)
+```
+
+```{r}
+library(MVN)
+
+N2<-N[sample(nrow(N),0.3*nrow(N)),]
+
+result = mvn(N2, mvnTest = "mardia", alpha = 0.05) 
+result$multivariateNormality
+```
+
+```{r}
+library(parameters)
+bartlett.test(N)
+```
+
+```{r}
+scree(R, main = "Gráfico de Sedimentación de CP y AF") 
+```
+
+```{r}
+eigenvalues <- acp$eig
+
+barplot(eigenvalues[, 2], names.arg=1:nrow(eigenvalues), 
+       main = "Varianzas",
+       xlab = "Componentes Principales",
+       ylab = "Porcentajes de varianzas",
+       col ="steelblue")
+# Add connected line segments to the plot
+lines(x = 1:nrow(eigenvalues), eigenvalues[, 2], 
+      type="b", pch=19, col = "red")
+
+barplot(eigenvalues[, 3], names.arg=1:nrow(eigenvalues), 
+       main = "Varianza Acumulada",
+       xlab = "Componentes Principales",
+       ylab = "Porcentaje de Varianza Acumulado",
+       col ="steelblue")
+# Add connected line segments to the plot
+lines(x = 1:nrow(eigenvalues), eigenvalues[, 3], 
+      type="b", pch=19, col = "red")
+
+#fviz_screeplot(acp)
+```
+
+```{r}
+w<-fa(R, nfactors = 1, rotate = "quartimax", fm ="pa") #Factores principales
+#x<-fa(R, nfactors = 2, rotate = "quartimax", fm ="mle") #Maxima versimilitud
+```
+
+```{r}
+fa.diagram(w, main = "Diagrama de Análisis Factorial")
+```
+
+```{r}
+print.psych(w, sort=TRUE)
+```
+
+```{r}
+loadings = as.data.frame(unclass(w$loadings))
+```
+
+```{r}
+colnames(loadings) = "Factor 1"
+loadings$Test = rownames(loadings)
+loadings
+```
+
+```{r}
+loadings.m <- melt(loadings, id="Test", 
+                   measure=c("Factor 1"), 
+                   variable.name="Factor", value.name="Loading")
+```
+
+```{r}
+#For each test, plot the loading as length and fill color of a bar
+# note that the length will be the absolute value of the loading but the 
+# fill color will be the signed value, more on this below
+ggplot(loadings.m, aes(Test, abs(Loading), fill=Loading)) + 
+  facet_wrap(~ Factor, nrow=1) + #place the factors in separate facets
+  geom_bar(stat="identity") + #make the bars
+  coord_flip() + #flip the axes so the test names can be horizontal  
+  #define the fill color gradient: blue=positive, red=negative
+  scale_fill_gradient2(name = "Loading", 
+                       high = "blue", mid = "white", low = "red", 
+                       midpoint=0, guide=F) +
+  ylab("Fuerza de la Correlación entre la Variable y el Factor") + #improve y-axis label
+  xlab("Variables") +
+  theme_bw(base_size=10) #use a black-and0white theme with set font size
+```
+
+A few words about the fill color gradient: the contribution of a measure to a factor is reflected by the absolute value of the loading, the sign just reflects the scale direction of the measurement. For most of the measures, a higher score indicates better performance (for example, percent correct), but there are two measures for which higher scores indicate *poorer* performance (phonological and semantic errors), which therefore produce negative loadings. Having those bars facing the opposite direction would create a lot of wasted white space. Using the absolute value of the loading makes all of the bars face the same direction, but I used fill color to indicate the negative loadings. I set the negative loadings to be red so they stand out more. I set white as the mid-point color and the mid-point as 0 so that near-zero loadings (which are less important) would be desaturated and therefore less visually salient.
+
+```{r}
+modelo = lm(N$O3 ~ N$PRS + N$RH + N$SR + N$TOUT + N$WDR + N$WSR, data = N)
+summary(modelo)
+```
+
+```{r}
+step(object = modelo, direction = "both", trace = 1)
+```
+
+```{r}
+p1 = ggplot(data = N, aes(N$PRS, modelo$residuals)) +
+         geom_point() + geom_smooth(color = "blue") +
+         geom_hline(yintercept = 0) + theme_bw() + labs(
+           title = "Gráfico de Residuales de Presión Atmosférica",
+           x = "Presión Atmosférica",
+           y = "Residuales")
+
+p2 = ggplot(data = N, aes(N$RH, modelo$residuals)) +
+         geom_point() + geom_smooth(color = "blue") +
+         geom_hline(yintercept = 0) + theme_bw() + labs(
+           title = "Gráfico de Residuales de Humedad Relativa",
+           x = "Humedad Relativa",
+           y = "Residuales")
+
+p3 = ggplot(data = N, aes(N$SR, modelo$residuals)) +
+         geom_point() + geom_smooth(color = "blue") +
+         geom_hline(yintercept = 0) + theme_bw() + labs(
+           title = "Gráfico de Residuales de Radiación Solar",
+           x = "Radiación Solar",
+           y = "Residuales")
+
+p4 = ggplot(data = N, aes(N$TOUT, modelo$residuals)) +
+         geom_point() + geom_smooth(color = "blue") +
+         geom_hline(yintercept = 0) + theme_bw() + labs(
+           title = "Gráfico de Residuales de Temperatura",
+           x = "Temperatura",
+           y = "Residuales")
+
+p5 = ggplot(data = N, aes(N$WDR, modelo$residuals)) +
+         geom_point() + geom_smooth(color = "blue") +
+         geom_hline(yintercept = 0) + theme_bw() + labs(
+           title = "Gráfico de Residuales de Dirección del Viento",
+           x = "Dirección del Viento",
+           y = "Residuales")
+
+p6 = ggplot(data = N, aes(N$WSR, modelo$residuals)) +
+         geom_point() + geom_smooth(color = "blue") +
+         geom_hline(yintercept = 0) + theme_bw() + labs(
+           title = "Gráfico de Residuales de Velocidad del Viento",
+           x = "Velocidad del Viento",
+           y = "Residuales")
+
+p1
+p2
+p3
+p4
+p5
+p6
+```
+
+```{r}
+coef = modelo$coefficients
+(eqn <- paste("Y =", paste(round(coef[1],2), paste(round(coef[-1],2), names(coef[-1]), sep=" * ", collapse=" + "), sep=" + "), "+ e"))
+```
+
+```{r}
+library(pls)
+pcr_model <- pcr(N$O3~., data = N, validation = "CV")
+summary(pcr_model)
+```
+
+```{r}
+# Plot the root mean squared error
+validationplot(pcr_model, main = "Ozono", xlab ="Número de Componentes", ylab = "Distancia Media Cuadrática Mínima")
+# Plot the cross validation MSE
+validationplot(pcr_model, val.type="MSEP", main = "Ozono", xlab ="Número de Componentes", ylab = "Error Cuadrático Medio")
+# Plot the R2
+validationplot(pcr_model, val.type = "R2", main = "Ozono", xlab ="Número de Componentes", ylab = "R2")
+predplot(pcr_model, main = "Validación de Predicciones de Ozono", xlab ="Mediciones", ylab = "Predicciones")
+coefplot(pcr_model, main = "Ozono", xlab ="Variable", ylab = "Coeficiente de Regresión")
+```
+
+```{r}
+# Train-test split
+train <- N[1:length(N)*.7,]
+y_test <- N[length(N)*.7:length(N), 7]
+test <- N[length(N)*.7:length(N), 1:6]
+    
+
+pcr_pred <- predict(pcr_model, test, ncomp = 6)
+mean((pcr_pred - y_test)^2)
+```
